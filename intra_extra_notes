@@ -1,0 +1,29 @@
+---
+GMPI threshold for white matter -> -0.3 (confirmar en Arnulfo)
+GMPI Nans -> out of the brain
+
+---
+Reject epochs to both EEG & iEEG
+
+---
+Channels change between sessions?
+No
+
+---
+Check channel names between dat & loc (ex. Y'2 vs Y2 in S1)
+check_chans_main.m
+
+---
+Establish origins of mu rhythms (scalp --> intra)
+
+---
+Reject from iEEG ref & bip
+Intercalar epocas de los dos registros rellenando con ceros para alinear los canales
+
+---
+Source modelling iEEG stimulation
+
+---
+
+
+

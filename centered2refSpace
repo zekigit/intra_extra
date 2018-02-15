@@ -1,0 +1,70 @@
+#!/usr/bin/env python 
+
+import nibabel as nb
+import numpy as np
+import sys, getopt
+
+def Print(itkObject,f=sys.stderr):
+	'''
+            Print wrapper function for itkObject Print Method
+	'''
+	ss = itk.StringStream()
+	itkObject.Print(ss.GetStream())
+	print >> f, ss.GetString()
+
+def main(argv):
+	'''
+            This program takes the orig.mgz file and writes out the AffineTransformation required
+            to bring *h.pial/white into ref.nii.gz reference space
+            centered2ref.py -h for help
+            centered2ref.py  -o <origfile> -t <transformfileOut>
+	'''
+
+	reffile = ''
+	origfile = ''
+	transformfile = ''
+
+	try:
+		opts, args = getopt.getopt(argv,"ho:t:",["origfile=","tfile="])
+
+	except getopt.GetoptError:
+		print 'centered2ref.py  -o <origfile> -t <transformfileOut>'
+		sys.exit(2)
+
+	for opt, arg in opts:
+		if opt == '-h':
+			print 'centered2ref.py -o <origfile> -t <transformfileOut>'
+			sys.exit()
+		elif opt in ("-o", "--origfile"):
+			origfile = arg
+		elif opt in ("-t", "--transfromfile"):
+			transformfile = arg
+	# read orig.mgz file
+	orig= nb.load(origfile)
+	
+	# extract affine matrix ->vox2ras<-
+	mat2 = np.matrix(orig.get_affine())
+
+	# convert volume center from orig.mgz in ras coordinates
+	T = np.matrix(orig.get_header().get_vox2ras())
+	p = np.array([128,128,128,1])
+	v_trasl = np.squeeze(np.asarray(T.dot(p.T)[0,:3]))
+
+	# we should move RAS to LPS and then invert the matrix before writing to disk
+	v_trasl[2] = -v_trasl[2]
+
+	R = np.eye(3).flatten()
+
+	T = np.concatenate((np.squeeze(np.asarray(R.flatten())),v_trasl))
+
+        with open(transformfile,'w') as tFile:
+            tFile.write('# Transform File V1.0\n# Transform center2ref\n')
+            tFile.write('Transform: AffineTransform_double_3_3\n')
+            tFile.write('Parameters: '+' '.join([str(x) for x in T]))
+            tFile.write('\nFixedParameters: 0 0 0\n')
+
+        tFile.close()
+
+
+if __name__ == "__main__":
+	main(sys.argv[1:])
