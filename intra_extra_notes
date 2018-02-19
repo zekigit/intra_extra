@@ -19,6 +19,7 @@ Establish origins of mu rhythms (scalp --> intra)
 ---
 Reject from iEEG ref & bip
 Intercalar epocas de los dos registros rellenando con ceros para alinear los canales
+Resuelto por Andrea
 
 ---
 Source modelling iEEG stimulation

@@ -116,3 +116,43 @@ def check_seeg_chans(seeg_base, seeg_loc):
     return rec_chans, rec_ixs, seeg_rec
 
 
+def make_dig_mntage_file(subj, study_path):
+    # load digitization
+    dig_fname = op.join(study_path, 'physio_data', subj, 'EGI_contacts.mat')
+    dig_points = loadmat(dig_fname)['Digitalization']['LocalizationMRI']
+
+    dig_points[:, 0] = dig_points[:, 0]*-1
+    dig_points[:, 1] = dig_points[:, 1]*-1
+
+    ch_names = np.array(['1', '3'] + ['E' + str(i + 1) for i in range(256)] + ['2'])
+    ch_types = np.array([['fid'] + ['fid'] + ['eeg']*(len(ch_names)-3) + ['fid']])
+    hpts_fname = op.join(study_path, 'physio_data', subj, 'chan_info', '%s_egi_digitalization.hpts' %subj)
+
+    hpts = np.zeros(len(ch_names), dtype=[('ch_type', 'S6'), ('ch_name', 'S6'), ('x', float), ('y', float), ('z', float)])
+    hpts['ch_type'] = ch_types
+    hpts['ch_name'] = ch_names
+    hpts['x'] = dig_points[:, 0]
+    hpts['y'] = dig_points[:, 1]
+    hpts['z'] = dig_points[:, 2]
+
+    np.savetxt(hpts_fname, hpts, fmt="%3s %3s %10.3f %10.3f %10.3f")
+
+
+def find_stim_coords(cond, subj, study_path):
+    seeg_ch_info = pd.read_csv(op.join(study_path, 'physio_data', subj, 'chan_info', '%s_seeg_ch_info.csv' % cond))
+
+    is_left = cond.find('\'') != -1
+    if is_left:
+        match = re.search(r"[A-Z]'[0-9]+", cond[3:])
+    else:
+        match = re.search(r"[A-Z][0-9]+", cond[3:])
+    if match:
+        ch = match.group()
+
+    ch1_coords = seeg_ch_info[['x_surf', 'y_surf', 'z_surf']].loc[seeg_ch_info['name'] == ch]
+    ch1_ix = ch1_coords.index.values
+    ch2_coords = seeg_ch_info[['x_surf', 'y_surf', 'z_surf']].iloc[ch1_ix+1]
+
+    stim_coords = np.average([ch1_coords.values, ch2_coords.values], axis=0)
+    return stim_coords
+
