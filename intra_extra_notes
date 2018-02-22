@@ -26,5 +26,7 @@ Source modelling iEEG stimulation
 
 ---
 
+Codigos de fiducials
+lpa = 1, nasion = 2, rpa = 3
 
 

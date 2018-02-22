@@ -50,7 +50,8 @@ def make_fwd_solution(cond_fname, subj, study_path):
 
     fwd = mne.make_forward_solution(eeg_epo.info, trans_fname, src_fname, bem_fname)
 
-    # mne.viz.plot_bem(subject='S1', subjects_dir=subjects_dir, src=src_fname)
+    mne.viz.plot_bem(subject='S1', subjects_dir=subjects_dir, src=src_fname)
+    mne.viz.plot_bem(subject='S3', subjects_dir=subjects_dir)
 
     # trans = mne.read_trans(trans_fname)
     # mne.viz.plot_alignment(eeg_epo.info, trans, subject='%s' % subj, subjects_dir=op.join(study_path, 'freesurfer_subjects'))
@@ -78,13 +79,13 @@ def source_loc(cond_fname, subj, fwd):
     # src_fname = op.join(study_path, 'source_stim', 'images', subj, '%s-oct5-src.fif' % subj)
     # src = mne.read_source_spaces(src_fname, patch_stats=True)
     #
-    # brain = Brain('S1', 'lh', 'inflated', subjects_dir=subjects_dir)
+    # brain = Brain(subj, 'lh', 'inflated', subjects_dir=subjects_dir)
     # surf = brain.geo['lh']
     #
     # vertidx = np.where(src[0]['inuse'])[0]
     #
-    # mlab.points3d(surf.x[vertidx], surf.y[vertidx],
-    #               surf.z[vertidx], color=(1, 1, 0), scale_factor=1.5)
+    # mlab.points3d(surf.x[vertidx[:-1]], surf.y[vertidx[:-1]],
+    #               surf.z[vertidx[:-1]], color=(1, 1, 0), scale_factor=1.5)
     # mlab.show()
 
     cond = eeg_epo.info['description']
@@ -133,7 +134,7 @@ def source_loc(cond_fname, subj, fwd):
     # loc_dist = euclidean(stim_coords, pk_coords)
     # print loc_dist
 
-subj = subjects[0]
+subj = subjects[3]
 
 epo_path = op.join(study_path, 'source_stim', 'epochs')
 conds = glob.glob(epo_path + '/*.edf')

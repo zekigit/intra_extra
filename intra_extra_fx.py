@@ -3,7 +3,11 @@ import os.path as op
 import pandas as pd
 import numpy as np
 from ieeg_fx import loadmat, make_bnw_nodes
+from intra_extra_info import subj_dig_mont
 import re
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
 
 
 def load_locs(subject, study_path, condition):
@@ -38,9 +42,9 @@ def plot_locs(seeg_loc, info, study_path):
     make_bnw_nodes(file_nodes, coords=seeg_loc[['x', 'y', 'z']], colors=1., sizes=1.)
 
 
-def load_eeg(cond_fpath, subj):
+def load_eeg(cond_fname, subj):
     # load EEG data
-    eeg_fname = op.join(cond_fpath, 'HDEEG', 'data.mat')
+    eeg_fname = op.join(cond_fname, 'HDEEG', 'data.mat')
     try:
         eeg_base = loadmat(eeg_fname)['HDEEG']
     except KeyError:
@@ -49,7 +53,7 @@ def load_eeg(cond_fpath, subj):
     ch_names = ['lpa', 'rpa'] + ['E' + str(i + 1) for i in range(256)] + ['nasion']
 
     # load digitization
-    dig_fname = op.join(cond_fpath.split(subj)[0], subj, 'EGI_contacts.mat')
+    dig_fname = op.join(cond_fname.split(subj)[0], subj, 'EGI_contacts.mat')
     dig_points = loadmat(dig_fname)['Digitalization']['LocalizationMRI']
 
     dig_montage = mne.channels.read_dig_montage(hsp=dig_points, elp=dig_points, point_names=ch_names, unit='mm', transform=False)
@@ -116,7 +120,33 @@ def check_seeg_chans(seeg_base, seeg_loc):
     return rec_chans, rec_ixs, seeg_rec
 
 
-def make_dig_mntage_file(subj, study_path):
+def export_slicer_markups_egi(subj, study_path):
+    dig_fname = op.join(study_path, 'physio_data', subj, 'EGI_contacts.mat')
+    dig_points = loadmat(dig_fname)['Digitalization']['LocalizationMRI']
+
+    dig_points[:, 0] = dig_points[:, 0]*-1
+    dig_points[:, 1] = dig_points[:, 1]*-1
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(dig_points[:, 0], dig_points[:, 1], dig_points[:, 2])
+    for x, y, z, lab in zip(dig_points[:, 0], dig_points[:, 1], dig_points[:, 2], np.arange(len(dig_points))):
+        ax.text(x, y, z, lab)
+    print dig_points.shape
+
+    ch_names = subj_dig_mont[subj]['ch_names']
+
+    header = ['# Markups fiducial file version = 4.5', '# CoordinateSystem = 0', '# columns = id,x,y,z,ow,ox,oy,oz,vis,sel,lock,label,desc,associatedNodeID']
+    elec_info = ['vtkMRMLMarkupsFiducialNode_{},{},{},{},0,0,0,1,1,1,0,{},,' .format(ix+1, x, y, z, lab) for ix, (x, y, z, lab) in
+                 enumerate(zip(dig_points[:,0], dig_points[:,1], dig_points[:,2], ch_names))]
+
+    dat_to_write = header + elec_info
+    with open(op.join(study_path, 'physio_data', subj, 'chan_info', 'egi_locs_ori.fcsv'), 'w') as fid:
+        fid.writelines('%s\n' % l for l in dat_to_write)
+
+
+
+def make_dig_montage_file(subj, study_path):
     # load digitization
     dig_fname = op.join(study_path, 'physio_data', subj, 'EGI_contacts.mat')
     dig_points = loadmat(dig_fname)['Digitalization']['LocalizationMRI']
@@ -124,9 +154,15 @@ def make_dig_mntage_file(subj, study_path):
     dig_points[:, 0] = dig_points[:, 0]*-1
     dig_points[:, 1] = dig_points[:, 1]*-1
 
-    ch_names = np.array(['1', '3'] + ['E' + str(i + 1) for i in range(256)] + ['2'])
-    ch_types = np.array([['fid'] + ['fid'] + ['eeg']*(len(ch_names)-3) + ['fid']])
-    hpts_fname = op.join(study_path, 'physio_data', subj, 'chan_info', '%s_egi_digitalization.hpts' %subj)
+    ch_names = subj_dig_mont[subj]['ch_names']
+    ch_types = subj_dig_mont[subj]['ch_types']
+    dig_sel = subj_dig_mont[subj]['dig_sel']
+    dig_points = dig_points[dig_sel]
+
+    # ch_names = np.array(['1', '3'] + ['E' + str(i + 1) for i in range(256)] + ['2'])
+    # ch_types = np.array([['fid'] + ['fid'] + ['eeg']*(len(ch_names)-3) + ['fid']])
+
+    hpts_fname = op.join(study_path, 'physio_data', subj, 'chan_info', '%s_egi_digitalization.hpts' % subj)
 
     hpts = np.zeros(len(ch_names), dtype=[('ch_type', 'S6'), ('ch_name', 'S6'), ('x', float), ('y', float), ('z', float)])
     hpts['ch_type'] = ch_types
@@ -149,10 +185,25 @@ def find_stim_coords(cond, subj, study_path):
     if match:
         ch = match.group()
 
-    ch1_coords = seeg_ch_info[['x_surf', 'y_surf', 'z_surf']].loc[seeg_ch_info['name'] == ch]
-    ch1_ix = ch1_coords.index.values
-    ch2_coords = seeg_ch_info[['x_surf', 'y_surf', 'z_surf']].iloc[ch1_ix+1]
+    ch1_coords = {'surf': seeg_ch_info[['x_surf', 'y_surf', 'z_surf']].loc[seeg_ch_info['name'] == ch],
+                  'head': seeg_ch_info[['x_mri', 'y_mri', 'z_mri']].loc[seeg_ch_info['name'] == ch]}
+    ch1_ix = ch1_coords['surf'].index.values
+    ch2_coords = {'surf': seeg_ch_info[['x_surf', 'y_surf', 'z_surf']].iloc[ch1_ix+1],
+                  'head': seeg_ch_info[['x_mri', 'y_mri', 'z_mri']].iloc[ch1_ix+1]}
 
-    stim_coords = np.average([ch1_coords.values, ch2_coords.values], axis=0)
+    stim_coords = {'surf': np.average([ch1_coords['surf'].values, ch2_coords['surf'].values], axis=0)[0],
+                   'head': np.average([ch1_coords['head'].values, ch2_coords['head'].values], axis=0)[0]}
     return stim_coords
+
+
+def get_stim_params(cond):
+    spl_cond = cond.split('_')
+    stim_ch = spl_cond[1]
+    w_s = spl_cond[2]
+    stim_int = spl_cond[3]
+    is_left = stim_ch.find('\'') != -1
+    stim_params = {'ch': stim_ch, 'is_left': is_left, 'w_s': w_s, 'stim_int': stim_int}
+    return stim_params
+
+
 
