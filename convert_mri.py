@@ -1,8 +1,13 @@
 import nibabel as nb
+import os.path as op
 
-mri_file = '/Users/lpen/Documents/intra_milano/hbp_jupyter/MRI.img'
+study_path = '/home/eze/intra_extra/'
+subj='S4'
+
+mri_file = op.join(study_path, subj, 'MRI.img')
 img = nb.load(mri_file)
-nb.save(img, '/Users/lpen/Documents/intra_milano/hbp_jupyter/MRI.nii')
+
+nb.save(img, op.join(study_path, subj, 'MRI.mgz'))
 
 
 mri_file = '/Users/lpen/Documents/intra_milano/hbp_jupyter/hbp_subj/mri/T1.mgz'

@@ -9,7 +9,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from mayavi import mlab
 from scipy.spatial.distance import euclidean
-from intra_extra_info import study_path, subjects, subjects_dir, bad_chans
 from intra_extra_fx import find_stim_coords, get_stim_params, plot_source_space
 import re
 from mpl_toolkits.mplot3d import Axes3D
@@ -35,7 +34,7 @@ def make_fwd_solution(cond_fname, subj, study_path):
     return fwd
 
 
-def source_loc(evoked, cov, fwd, subj, study_path):
+def source_loc(evoked, cov, fwd, subj, study_path, plot=True):
     cond = evoked.info['description']
     stim_coords = find_stim_coords(cond, subj, study_path)
     stim_params = get_stim_params(cond)
@@ -56,25 +55,26 @@ def source_loc(evoked, cov, fwd, subj, study_path):
     vertno_max, time_max = stc.get_peak(hemi=hemi)
     stc_max = np.max(stc.data)
 
-    brain_inf = stc.plot(surface='inflated', hemi=hemi, subjects_dir=subjects_dir,
-                         clim=dict(kind='value', lims=[0, stc_max*0.75, stc_max]),
-                         initial_time=time_max, time_unit='s', alpha=1, background='w', foreground='k')
+    if plot:
+        brain_inf = stc.plot(surface='inflated', hemi=hemi, subjects_dir=subjects_dir,
+                             clim=dict(kind='value', lims=[0, stc_max*0.75, stc_max]),
+                             initial_time=time_max, time_unit='s', alpha=1, background='w', foreground='k')
 
-    brain_inf.add_foci(vertno_max, coords_as_verts=True, hemi=hemi, color='blue',
-                       scale_factor=0.8)
+        brain_inf.add_foci(vertno_max, coords_as_verts=True, hemi=hemi, color='blue',
+                           scale_factor=0.8)
 
-    brain_inf.add_foci(stim_coords['surf'], map_surface='pial', hemi=hemi, color='green', scale_factor=0.8)
+        brain_inf.add_foci(stim_coords['surf'], map_surface='pial', hemi=hemi, color='green', scale_factor=0.8)
 
-    brain_inf.show_view(view)  # mlab.view(130, 90)
-    fig_fname = op.join(study_path, 'source_stim', subj, 'figures', 'distributed', '%s_inf_foci.eps' % cond)
-    brain_inf.save_image(fig_fname)
-    #mlab.show()
-    mlab.clf()
+        brain_inf.show_view(view)  # mlab.view(130, 90)
+        fig_fname = op.join(study_path, 'source_stim', subj, 'figures', 'distributed', '%s_inf_foci.eps' % cond)
+        brain_inf.save_image(fig_fname)
+        mlab.show()
+        mlab.clf()
 
     max_mni = mne.vertex_to_mni(vertno_max, hemis=0, subject=subj, subjects_dir=subjects_dir)  # mni coords of vertex (ojo vertex resolution ico-5)
     stim_mni = stim_coords['mni']  # mni coords of stimulation
     dist_mni = euclidean(max_mni, stim_mni)
-    print dist_mni
+    print(dist_mni)
     return dist_mni
 
     # brain_pial = stc.plot(surface='pial', hemi='lh', subjects_dir=subjects_dir,
@@ -129,14 +129,16 @@ def dipole_source_loc(evoked, cov,  subj, study_path):
     green_patch = mpatches.Patch(color='green')
     fig.legend(handles=[red_patch, green_patch], labels=['dipole', 'electrode'])
     fig.savefig(op.join(study_path, 'source_stim', subj, 'figures', 'dipole', '%s_dip.png' % cond))
-    print dist_surf
+    print(dist_surf)
     return dist_surf
+
 
 
 
 if __name__ == '__main__':
     subj = 'S5'
-    study_path = '/Volumes/MAXTOR'
+    study_path = '/home/eze/intra_extra'
+    subjects_dir = '/home/eze/intra_extra/freesurfer_subjects'
 
     epo_path = op.join(study_path, 'source_stim', subj, 'epochs', 'fif')
     conds = glob.glob(epo_path + '/*-epo.fif')
@@ -150,16 +152,18 @@ if __name__ == '__main__':
     for cond_fname in conds:
         eeg_epo = mne.read_epochs(cond_fname)
         eeg_epo.interpolate_bads()
-        # mne.viz.plot_evoked_topo(evoked)
         cov = mne.compute_covariance(eeg_epo, method='shrunk', tmin=-0.5, tmax=-0.3)  # use method='auto' for final computation
         evoked = eeg_epo.average()
+        # mne.viz.plot_evoked_topo(evoked)
+
         distr_mni_err = source_loc(evoked, cov, fwd, subj, study_path)
+        dip_surf_err = dipole_source_loc(cond_fname, subj, study_path)
 
-
-
+        cond = eeg_epo.info['description']
+        stim_params = get_stim_params(cond)
 
 
         a={'subj': subj, 'w_s': stim_params['w_s'], 'intens': stim_params['stim_int'], 'ch': stim_params['ch'],
          'is_left': stim_params['is_left'], }
 
-        dipole_source_loc(cond_fname, subj, study_path)
+

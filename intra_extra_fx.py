@@ -227,3 +227,5 @@ def plot_source_space(subj, study_path, subjects_dir):
     mlab.show()
 
 
+def save_results(stim_params, subj, study_path):
+    pass
