@@ -132,7 +132,7 @@ def export_slicer_markups_egi(subj, study_path):
     ax.scatter(dig_points[:, 0], dig_points[:, 1], dig_points[:, 2])
     for x, y, z, lab in zip(dig_points[:, 0], dig_points[:, 1], dig_points[:, 2], np.arange(len(dig_points))):
         ax.text(x, y, z, lab)
-    print dig_points.shape
+    print(dig_points.shape)
 
     ch_names = subj_dig_mont[subj]['ch_names']
 
@@ -175,7 +175,7 @@ def make_dig_montage_file(subj, study_path):
 
 
 def find_stim_coords(cond, subj, study_path):
-    seeg_ch_info = pd.read_csv(op.join(study_path, 'physio_data', subj, 'chan_info', '%s_seeg_ch_info.csv' % cond))
+    seeg_ch_info = pd.read_csv(op.join(study_path, 'physio_data', subj, 'chan_info', '%s_seeg_ch_info.csv' % subj))
 
     is_left = cond.find('\'') != -1
     if is_left:
@@ -186,13 +186,18 @@ def find_stim_coords(cond, subj, study_path):
         ch = match.group()
 
     ch1_coords = {'surf': seeg_ch_info[['x_surf', 'y_surf', 'z_surf']].loc[seeg_ch_info['name'] == ch],
-                  'head': seeg_ch_info[['x_mri', 'y_mri', 'z_mri']].loc[seeg_ch_info['name'] == ch]}
+                  'scanner_RAS': seeg_ch_info[['x_mri', 'y_mri', 'z_mri']].loc[seeg_ch_info['name'] == ch],
+                  'mni': seeg_ch_info[['x_mni152', 'y_mni152', 'z_mni152']].loc[seeg_ch_info['name'] == ch]}
+
+
     ch1_ix = ch1_coords['surf'].index.values
     ch2_coords = {'surf': seeg_ch_info[['x_surf', 'y_surf', 'z_surf']].iloc[ch1_ix+1],
-                  'head': seeg_ch_info[['x_mri', 'y_mri', 'z_mri']].iloc[ch1_ix+1]}
+                  'scanner_RAS': seeg_ch_info[['x_mri', 'y_mri', 'z_mri']].iloc[ch1_ix+1],
+                  'mni': seeg_ch_info[['x_mni152', 'y_mni152', 'z_mni152']].iloc[ch1_ix + 1]}
 
     stim_coords = {'surf': np.average([ch1_coords['surf'].values, ch2_coords['surf'].values], axis=0)[0],
-                   'head': np.average([ch1_coords['head'].values, ch2_coords['head'].values], axis=0)[0]}
+                   'scanner_RAS': np.average([ch1_coords['scanner_RAS'].values, ch2_coords['scanner_RAS'].values], axis=0)[0],
+                   'mni': np.average([ch1_coords['mni'].values, ch2_coords['mni'].values], axis=0)[0]}
     return stim_coords
 
 
@@ -205,5 +210,20 @@ def get_stim_params(cond):
     stim_params = {'ch': stim_ch, 'is_left': is_left, 'w_s': w_s, 'stim_int': stim_int}
     return stim_params
 
+
+def plot_source_space(subj, study_path, subjects_dir):
+    from surfer import Brain  # noqa
+    import mayavi.mlab as mlab
+    src_fname = op.join(study_path, 'source_stim', subj, 'source_files', '%s-oct5-src.fif' % subj)
+    src = mne.read_source_spaces(src_fname, patch_stats=True)
+
+    brain = Brain(subj, 'lh', 'inflated', subjects_dir=subjects_dir)
+    surf = brain.geo['lh']
+
+    vertidx = np.where(src[0]['inuse'])[0]
+
+    mlab.points3d(surf.x[vertidx[:-1]], surf.y[vertidx[:-1]],
+                  surf.z[vertidx[:-1]], color=(1, 1, 0), scale_factor=1.5)
+    mlab.show()
 
 
