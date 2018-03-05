@@ -23,3 +23,4 @@ python /Users/lpen/PycharmProjects/intra_extra/make_source_space.py ${SUBJECT} $
 
 # Run coregistration
 #mne coreg
+

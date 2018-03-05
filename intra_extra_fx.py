@@ -227,5 +227,21 @@ def plot_source_space(subj, study_path, subjects_dir):
     mlab.show()
 
 
-def save_results(stim_params, subj, study_path):
-    pass
+def save_results(subj, study_path, stim_params, evoked, dist_dis, dist_dip):
+    import csv
+    cols = ['subj', 'w_s', 'intens', 'ch', 'is_left', 'n_epo', 'n_ch', 'dist_dis', 'dist_dip']
+    results_fname = op.join(study_path, 'source_stim', subj, 'results', '%s_results.csv' % subj)
+    if not op.isfile(results_fname):
+        with open(results_fname, 'w') as fid:
+            wr = csv.writer(fid, delimiter=',', quotechar='\'')
+            wr.writerow(cols)
+
+    results = [subj, stim_params['w_s'], stim_params['stim_int'], stim_params['ch'], stim_params['is_left'], evoked.nave,
+               len(evoked.ch_names), round(dist_dis, 2), round(dist_dip, 2)]
+    with open(results_fname, 'a') as fid:
+        wr = csv.writer(fid, delimiter=',', quotechar='\'')
+        wr.writerow(results)
+
+def read_an_to_ori_trans(an_to_ori_fname):
+    an_to_ori_trans = np.genfromtxt(an_to_ori_fname, skip_header=8, skip_footer=18)
+    return an_to_ori_trans

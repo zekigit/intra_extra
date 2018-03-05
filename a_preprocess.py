@@ -37,13 +37,13 @@ def preprocess(eeg_epo):
     # eeg_epo = eeg_epo[0]
     eeg_epo.filter(0.1, None, method='iir', iir_params=None)
     eeg_epo.plot(n_channels=64, scalings={'eeg': 4e-4}, n_epochs=len(eeg_epo), block=True)
-    plt.clf()
-    plt.close()
+    # plt.clf()
+    # plt.close()
     eeg_epo.set_eeg_reference('average', projection=True)
     eeg_epo.apply_proj()
     epo_fname = op.join(study_path, 'source_stim', subj, 'epochs', 'fif', '%s-epo.fif' % eeg_epo.info['description'])
     eeg_epo.save(epo_fname)
-    print 'saving'
+    print('saving')
     return eeg_epo
 
 
@@ -52,8 +52,6 @@ if __name__ == '__main__':
     # study_path = sys.argv[2]
 
     subj = 'S5'
-    study_path = '/Volumes/MAXTOR'
-
     dig_fname = op.join(study_path, 'physio_data', subj, 'chan_info', '%s_egi_digitalization.hpts' % subj)
     if not op.isfile(dig_fname):
         make_dig_montage_file(subj, study_path)

@@ -15,5 +15,5 @@ MODEL = mne.make_bem_model(subject=SUBJECT, ico=4,
 
 # BEM  solution
 BEM = mne.make_bem_solution(MODEL)
-mne.write_bem_solution(SUBJECTS_DIR + '/%s/%s-bem-sol.fif' % (SUBJECT, SUBJECT), BEM)
+mne.write_bem_solution(SUBJECTS_DIR + '/%s/bem/%s-bem-sol.fif' % (SUBJECT, SUBJECT), BEM)
 

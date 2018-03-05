@@ -25,8 +25,9 @@ Resuelto por Andrea
 Source modelling iEEG stimulation
 
 ---
-
 Codigos de fiducials
 lpa = 1, nasion = 2, rpa = 3
 
+---
+S3 bem anony "Minimum distance between the outer skull and inner skull surfaces is approximately 2000.0 mm"
 
