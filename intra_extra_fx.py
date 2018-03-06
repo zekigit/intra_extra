@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 
-
 def load_locs(subject, study_path, condition):
     seeg_loc_file = op.join(study_path, 'physio_data', subject, 'chan_info', '%s_%s_seeg_ch_info.csv' % (subject, condition))
     eeg_loc_file = op.join(study_path, 'physio_data', subject, 'EGI_contacts.mat')
@@ -145,7 +144,6 @@ def export_slicer_markups_egi(subj, study_path):
         fid.writelines('%s\n' % l for l in dat_to_write)
 
 
-
 def make_dig_montage_file(subj, study_path):
     # load digitization
     dig_fname = op.join(study_path, 'physio_data', subj, 'EGI_contacts.mat')
@@ -189,15 +187,26 @@ def find_stim_coords(cond, subj, study_path):
                   'scanner_RAS': seeg_ch_info[['x_mri', 'y_mri', 'z_mri']].loc[seeg_ch_info['name'] == ch],
                   'mni': seeg_ch_info[['x_mni152', 'y_mni152', 'z_mni152']].loc[seeg_ch_info['name'] == ch]}
 
+    ch2 = '{}{}' .format(ch[0] if not is_left else ch[:2], int(re.findall(r'[1-9]+', ch)[0])+1)
 
-    ch1_ix = ch1_coords['surf'].index.values
-    ch2_coords = {'surf': seeg_ch_info[['x_surf', 'y_surf', 'z_surf']].iloc[ch1_ix+1],
-                  'scanner_RAS': seeg_ch_info[['x_mri', 'y_mri', 'z_mri']].iloc[ch1_ix+1],
-                  'mni': seeg_ch_info[['x_mni152', 'y_mni152', 'z_mni152']].iloc[ch1_ix + 1]}
+    ch2_coords = {'surf': seeg_ch_info[['x_surf', 'y_surf', 'z_surf']].loc[seeg_ch_info['name'] == ch2],
+                  'scanner_RAS': seeg_ch_info[['x_mri', 'y_mri', 'z_mri']].loc[seeg_ch_info['name'] == ch2],
+                  'mni': seeg_ch_info[['x_mni152', 'y_mni152', 'z_mni152']].loc[seeg_ch_info['name'] == ch2]}
 
     stim_coords = {'surf': np.average([ch1_coords['surf'].values, ch2_coords['surf'].values], axis=0)[0],
                    'scanner_RAS': np.average([ch1_coords['scanner_RAS'].values, ch2_coords['scanner_RAS'].values], axis=0)[0],
                    'mni': np.average([ch1_coords['mni'].values, ch2_coords['mni'].values], axis=0)[0]}
+
+    surf_ori_to_sli_trans_fname = op.join(study_path, 'source_stim', subj, 'source_files',
+                                          'surf_ori_to_surf_sli_trans.tfm')
+    surf_ori_to_sli_trans = np.loadtxt(surf_ori_to_sli_trans_fname)
+    from scipy.linalg import inv
+    from mne.transforms import apply_trans as at
+
+    sli_to_ori = inv(surf_ori_to_sli_trans)
+    coords_surf_ori = at(sli_to_ori, stim_coords['scanner_RAS'])
+
+    stim_coords['surf_ori'] = coords_surf_ori.copy()
     return stim_coords
 
 
@@ -227,10 +236,10 @@ def plot_source_space(subj, study_path, subjects_dir):
     mlab.show()
 
 
-def save_results(subj, study_path, stim_params, evoked, dist_dis, dist_dip):
+def save_results(subj, study_path, stim_params, evoked, dist_dis, dist_dip, img_type):
     import csv
     cols = ['subj', 'w_s', 'intens', 'ch', 'is_left', 'n_epo', 'n_ch', 'dist_dis', 'dist_dip']
-    results_fname = op.join(study_path, 'source_stim', subj, 'results', '%s_results.csv' % subj)
+    results_fname = op.join(study_path, 'source_stim', subj, 'results', '%s_%s_results.csv' % (subj, img_type))
     if not op.isfile(results_fname):
         with open(results_fname, 'w') as fid:
             wr = csv.writer(fid, delimiter=',', quotechar='\'')

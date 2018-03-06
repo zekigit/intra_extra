@@ -23,7 +23,7 @@ subj_dig_mont = {'S1':  {'ch_names': ['1', '3'] + ['E' + str(i + 1) for i in ran
                          'dig_sel' : []},
                  'S3':  {'ch_names': ['E' + str(i + 1) for i in range(256)] + ['3', '2', '1'],
                          'ch_types': ['eeg'] * 256 + ['fid'] * 3,
-                         'dig_sel' : np.concatenate((np.arange(256), [259, 260, 261]))},
+                         'dig_sel' : np.concatenate((np.arange(256), [256, 257, 258]))},
                  'S4':  {'ch_names': ['E' + str(i + 1) for i in range(256)] + ['3', '2', '1'],
                          'ch_types': ['eeg'] * 256 + ['fid'] * 3,
                          'dig_sel' : np.concatenate((np.arange(256), [259, 260, 261]))},
