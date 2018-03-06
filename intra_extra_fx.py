@@ -3,7 +3,7 @@ import os.path as op
 import pandas as pd
 import numpy as np
 from ieeg_fx import loadmat, make_bnw_nodes
-from intra_extra_info import subj_dig_mont
+from intra_extra_info import subj_dig_mont, study_path
 import re
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -41,7 +41,7 @@ def plot_locs(seeg_loc, info, study_path):
     make_bnw_nodes(file_nodes, coords=seeg_loc[['x', 'y', 'z']], colors=1., sizes=1.)
 
 
-def load_eeg(cond_fname, subj):
+def load_eeg(cond_fname, subj, study_path):
     # load EEG data
     eeg_fname = op.join(cond_fname, 'HDEEG', 'data.mat')
     try:
@@ -49,42 +49,18 @@ def load_eeg(cond_fname, subj):
     except KeyError:
         eeg_base = loadmat(eeg_fname)['EEG']
 
-    ch_names = ['lpa', 'rpa'] + ['E' + str(i + 1) for i in range(256)] + ['nasion']
+    ch_names = subj_dig_mont[subj]['ch_names']
 
-    # load digitization
-    dig_fname = op.join(cond_fname.split(subj)[0], subj, 'EGI_contacts.mat')
-    dig_points = loadmat(dig_fname)['Digitalization']['LocalizationMRI']
+    dig_fname = op.join(study_path, 'physio_data', subj, 'chan_info', '%s_egi_digitalization.hpts' % subj)
+    montage = mne.channels.read_montage(dig_fname, unit='mm')
 
-    dig_montage = mne.channels.read_dig_montage(hsp=dig_points, elp=dig_points, point_names=ch_names, unit='mm', transform=False)
-
-    montage = mne.channels.read_montage('EGI_256')
-    eeg_info = mne.create_info(['E' + str(i+1) for i in range(256)], 1000., 'eeg', montage=montage)
+    eeg_info = mne.create_info(['E{}' .format(n+1) for n in range(256)], 1000., 'eeg', montage=montage)
 
     eeg_raw = mne.io.RawArray(eeg_base['data'] * 1e-6, eeg_info)  # rescale to volts
-    eeg_raw.set_montage(dig_montage)
-
+    eeg_raw.set_montage(montage, set_dig=True)
+    eeg_raw.info['description'] = op.split(cond_fname)[-1].replace('_epochs.edf', '')
+    # eeg_raw.notch_filter(np.arange(50, 251, 50), filter_length='auto')
     return eeg_raw
-
-
-def load_phys(subject, study_path):
-    # Load SEEG
-    cond_fpath = op.join(study_path, 'physio_data', subject, 'BLINK', 'SPONT')
-    seeg_fname = op.join(cond_fpath, 'SEEG', 'data.mat')
-    seeg_base = loadmat(seeg_fname)['SEEG']
-    seeg_loc = load_locs(subject, study_path)
-
-    dig_ch_pos = dict(zip(seeg_loc['name'], 1e-3 * np.array(seeg_loc[['x', 'y', 'z']])))
-    montage = mne.channels.DigMontage(dig_ch_pos=dig_ch_pos)
-    seeg_info = mne.create_info(seeg_loc['name'].tolist(), 1000., 'seeg', montage=montage)
-    seeg_raw = mne.io.RawArray(seeg_base['data'], seeg_info)
-
-    # Load HDEEG
-    eeg_fname = op.join(cond_fpath, 'HDEEG', 'data.mat')
-    eeg_base = loadmat(eeg_fname)['HDEEG']
-    montage = mne.channels.read_montage('EGI_256')
-    eeg_info = mne.create_info(['E' + str(i+1) for i in range(256)], 1000., 'eeg', montage=montage)
-    eeg_raw = mne.io.RawArray(eeg_base['data'] * 1e-6, eeg_info)  # rescale to volts
-    return seeg_base, eeg_raw
 
 
 def check_seeg_chans(seeg_base, seeg_loc):
@@ -197,16 +173,16 @@ def find_stim_coords(cond, subj, study_path):
                    'scanner_RAS': np.average([ch1_coords['scanner_RAS'].values, ch2_coords['scanner_RAS'].values], axis=0)[0],
                    'mni': np.average([ch1_coords['mni'].values, ch2_coords['mni'].values], axis=0)[0]}
 
-    surf_ori_to_sli_trans_fname = op.join(study_path, 'source_stim', subj, 'source_files',
-                                          'surf_ori_to_surf_sli_trans.tfm')
-    surf_ori_to_sli_trans = np.loadtxt(surf_ori_to_sli_trans_fname)
-    from scipy.linalg import inv
-    from mne.transforms import apply_trans as at
-
-    sli_to_ori = inv(surf_ori_to_sli_trans)
-    coords_surf_ori = at(sli_to_ori, stim_coords['scanner_RAS'])
-
-    stim_coords['surf_ori'] = coords_surf_ori.copy()
+    # surf_ori_to_sli_trans_fname = op.join(study_path, 'source_stim', subj, 'source_files',
+    #                                       'surf_ori_to_surf_sli_trans.tfm')
+    # surf_ori_to_sli_trans = np.loadtxt(surf_ori_to_sli_trans_fname)
+    # from scipy.linalg import inv
+    # from mne.transforms import apply_trans as at
+    #
+    # sli_to_ori = inv(surf_ori_to_sli_trans)
+    # coords_surf_ori = at(sli_to_ori, stim_coords['scanner_RAS'])
+    #
+    # stim_coords['surf_ori'] = coords_surf_ori.copy()
     return stim_coords
 
 

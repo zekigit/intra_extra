@@ -149,7 +149,7 @@ def dipole_source_loc(evoked, cov,  fs_subj, study_path, plot=False):
     # ori_to_an_fname = op.join(study_path, 'freesurfer_subjects', subj, 'mri', 'ori_to_an_trans.lta')  # mri to mri
     # ori_to_an_trans = np.genfromtxt(ori_to_an_fname, skip_header=8, skip_footer=18)
 
-    trans_fname = op.join(study_path, 'source_stim', subj, 'source_files', img_type, '%s_fid-trans.fif' % fs_subj)
+    trans_fname = op.join(study_path, 'source_stim', subj, 'source_files', img_type, '%s-trans.fif' % fs_subj)
     bem_fname = op.join(subjects_dir, fs_subj, 'bem', '%s-bem-sol.fif' % fs_subj)
 
     cond = eeg_epo.info['description']
@@ -165,7 +165,7 @@ def dipole_source_loc(evoked, cov,  fs_subj, study_path, plot=False):
     surf_to_head = linalg.inv(trans['trans'])
 
     # stim_point = tra.apply_trans(surf_to_head, stim_coords['surf']/1e3)
-    stim_point = stim_coords['surf_ori']  # get point for plot in mm
+    stim_point = stim_coords['surf']  # get point for plot in mm
     #dip.pos[np.argmax(dip.gof)] = tra.apply_trans(surf_to_head, stim_coords['surf_ori']/1e3)  # check stim loc (apply affine in m)
 
     #stim_point = tra.apply_trans(ori_to_an_trans, stim_point)
