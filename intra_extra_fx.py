@@ -41,9 +41,9 @@ def plot_locs(seeg_loc, info, study_path):
     make_bnw_nodes(file_nodes, coords=seeg_loc[['x', 'y', 'z']], colors=1., sizes=1.)
 
 
-def load_eeg(cond_fname, subj, study_path):
+def load_eeg(fname_dat, subj, study_path):
     # load EEG data
-    eeg_fname = op.join(cond_fname, 'HDEEG', 'data.mat')
+    eeg_fname = op.join(fname_dat, 'HDEEG', 'data.mat')
     try:
         eeg_base = loadmat(eeg_fname)['HDEEG']
     except KeyError:
@@ -58,7 +58,8 @@ def load_eeg(cond_fname, subj, study_path):
 
     eeg_raw = mne.io.RawArray(eeg_base['data'] * 1e-6, eeg_info)  # rescale to volts
     eeg_raw.set_montage(montage, set_dig=True)
-    eeg_raw.info['description'] = op.split(cond_fname)[-1].replace('_epochs.edf', '')
+    # eeg_raw.plot_sensors(kind='3d', ch_type='all', show_names=True )
+    eeg_raw.info['description'] = op.split(fname_dat)[-1].replace('_epochs.edf', '')
     # eeg_raw.notch_filter(np.arange(50, 251, 50), filter_length='auto')
     return eeg_raw
 
@@ -153,9 +154,9 @@ def find_stim_coords(cond, subj, study_path):
 
     is_left = cond.find('\'') != -1
     if is_left:
-        match = re.search(r"[A-Z]'[0-9]+", cond[3:])
+        match = re.search(r"[A-Z]'[0-9]+", cond)
     else:
-        match = re.search(r"[A-Z][0-9]+", cond[3:])
+        match = re.search(r"[A-Z][0-9]+", cond)
     if match:
         ch = match.group()
 
@@ -172,7 +173,7 @@ def find_stim_coords(cond, subj, study_path):
     stim_coords = {'surf': np.average([ch1_coords['surf'].values, ch2_coords['surf'].values], axis=0)[0],
                    'scanner_RAS': np.average([ch1_coords['scanner_RAS'].values, ch2_coords['scanner_RAS'].values], axis=0)[0],
                    'mni': np.average([ch1_coords['mni'].values, ch2_coords['mni'].values], axis=0)[0]}
-
+    #
     # surf_ori_to_sli_trans_fname = op.join(study_path, 'source_stim', subj, 'source_files',
     #                                       'surf_ori_to_surf_sli_trans.tfm')
     # surf_ori_to_sli_trans = np.loadtxt(surf_ori_to_sli_trans_fname)
@@ -188,9 +189,9 @@ def find_stim_coords(cond, subj, study_path):
 
 def get_stim_params(cond):
     spl_cond = cond.split('_')
-    stim_ch = spl_cond[1]
-    w_s = spl_cond[2]
-    stim_int = spl_cond[3]
+    stim_ch = spl_cond[0]
+    w_s = spl_cond[1]
+    stim_int = spl_cond[2]
     is_left = stim_ch.find('\'') != -1
     stim_params = {'ch': stim_ch, 'is_left': is_left, 'w_s': w_s, 'stim_int': stim_int}
     return stim_params
@@ -230,3 +231,15 @@ def save_results(subj, study_path, stim_params, evoked, dist_dis, dist_dip, img_
 def read_an_to_ori_trans(an_to_ori_fname):
     an_to_ori_trans = np.genfromtxt(an_to_ori_fname, skip_header=8, skip_footer=18)
     return an_to_ori_trans
+
+
+def find_stim_events(raw):
+    import peakutils
+    good_ch = [ix for ix, ch in enumerate(raw.ch_names) if ch not in raw.info['bads']]
+    avg = raw.get_data(picks=good_ch).mean(0)
+    indexes = peakutils.indexes(avg, thres=0.7, min_dist=50)
+    plt.plot(raw.times, avg)
+    plt.plot(indexes/1e3, avg[indexes], 'o')
+    plt.title('stimulations found: %s' % len(indexes)), plt.ylabel('amplitude'), plt.xlabel('time (s)')
+    events = np.vstack((indexes, np.zeros(len(indexes)), np.ones(len(indexes)))).T.astype(int)
+    return events

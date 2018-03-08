@@ -115,8 +115,8 @@ def vol_source_loc(evoked, cov, fs_subj, study_path, plot=True):
                                 meg=False, eeg=True,
                                 n_jobs=2)
 
-    inv = mne.minimum_norm.make_inverse_operator(evoked.info, fwd, cov, loose=1, depth=0.8)
-    method = "dSPM"
+    inv = mne.minimum_norm.make_inverse_operator(evoked.info, fwd, cov, loose=1, depth=0.5)
+    method = "MNE"
     snr = 3.
     lambda2 = 1. / snr ** 2
     stc = mne.minimum_norm.apply_inverse(evoked, inv, lambda2, method=method, pick_ori=None)
@@ -133,7 +133,8 @@ def vol_source_loc(evoked, cov, fs_subj, study_path, plot=True):
     t0_img = index_img(img, 4)
     act_coord = ni.plotting.find_xyz_cut_coords(t0_img)
     #act_coord = [57, 122, 87]
-    st_map = plot_stat_map(t0_img, mri_file, threshold=150, display_mode='ortho', cmap=plt.cm.plasma)
+    thr = np.percentile(t0_img.get_data(), 10)
+    st_map = plot_stat_map(t0_img, mri_file, threshold=thr, display_mode='ortho', cmap=plt.cm.plasma)
     st_map.add_markers(np.reshape(act_coord, (-1, 3)), marker_color='g', marker_size=50)
     fname_fig = op.join(study_path, 'source_stim', subj, 'figures', 'volume', '%s_%s_st_map.pdf' % (subj, cond))
     st_map.savefig(fname_fig)
@@ -149,14 +150,14 @@ def dipole_source_loc(evoked, cov,  fs_subj, study_path, plot=False):
     # ori_to_an_fname = op.join(study_path, 'freesurfer_subjects', subj, 'mri', 'ori_to_an_trans.lta')  # mri to mri
     # ori_to_an_trans = np.genfromtxt(ori_to_an_fname, skip_header=8, skip_footer=18)
 
-    trans_fname = op.join(study_path, 'source_stim', subj, 'source_files', img_type, '%s-trans.fif' % fs_subj)
+    trans_fname = op.join(study_path, 'source_stim', subj, 'source_files', img_type, '%s_fid-trans.fif' % fs_subj)
     bem_fname = op.join(subjects_dir, fs_subj, 'bem', '%s-bem-sol.fif' % fs_subj)
 
     cond = eeg_epo.info['description']
     stim_coords = find_stim_coords(cond, subj, study_path)
 
     # Fit a dipole
-    dip = mne.fit_dipole(evo_crop, cov, bem_fname, trans_fname)[0]
+    dip = mne.fit_dipole(evo_crop, cov, bem_fname, trans_fname, min_dist=15, n_jobs=2)[0]
 
     import mne.transforms as tra
     from scipy import linalg
@@ -188,7 +189,7 @@ def dipole_source_loc(evoked, cov,  fs_subj, study_path, plot=False):
         red_patch = mpatches.Patch(color='red')
         green_patch = mpatches.Patch(color='green')
         fig.legend(handles=[red_patch, green_patch], labels=['dipole', 'electrode'])
-        fig.savefig(op.join(study_path, 'source_stim', subj, 'figures', 'dipole', '%s_dip.png' % cond))
+        fig.savefig(op.join(study_path, 'source_stim', subj, 'figures', 'dipole', '%s_dip_15mm.png' % cond))
         plt.close()
     print(dist_surf)
     return dist_surf
@@ -203,6 +204,7 @@ if __name__ == '__main__':
     conds = glob.glob(epo_path + '/*-epo.fif')
 
     fwd_fname = op.join(study_path, 'source_stim', subj, 'source_files', img_type, '%s-fwd.fif' % fs_subj)
+
 
     if not op.isfile(fwd_fname):
         fwd = make_fwd_solution(conds[0], fs_subj, study_path)
