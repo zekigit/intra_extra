@@ -173,17 +173,20 @@ def find_stim_coords(cond, subj, study_path):
     stim_coords = {'surf': np.average([ch1_coords['surf'].values, ch2_coords['surf'].values], axis=0)[0],
                    'scanner_RAS': np.average([ch1_coords['scanner_RAS'].values, ch2_coords['scanner_RAS'].values], axis=0)[0],
                    'mni': np.average([ch1_coords['mni'].values, ch2_coords['mni'].values], axis=0)[0]}
-    #
-    # surf_ori_to_sli_trans_fname = op.join(study_path, 'source_stim', subj, 'source_files',
-    #                                       'surf_ori_to_surf_sli_trans.tfm')
-    # surf_ori_to_sli_trans = np.loadtxt(surf_ori_to_sli_trans_fname)
-    # from scipy.linalg import inv
-    # from mne.transforms import apply_trans as at
-    #
-    # sli_to_ori = inv(surf_ori_to_sli_trans)
-    # coords_surf_ori = at(sli_to_ori, stim_coords['scanner_RAS'])
-    #
-    # stim_coords['surf_ori'] = coords_surf_ori.copy()
+
+
+    surf_ori_to_sli_trans_fname = op.join(study_path, 'source_stim', subj, 'source_files',
+                                          'surf_ori_to_surf_sli_trans.tfm')
+
+    if op.isfile(surf_ori_to_sli_trans_fname):
+        surf_ori_to_sli_trans = np.loadtxt(surf_ori_to_sli_trans_fname)
+        from scipy.linalg import inv
+        from mne.transforms import apply_trans as at
+
+        sli_to_ori = inv(surf_ori_to_sli_trans)
+        coords_surf_ori = at(sli_to_ori, stim_coords['scanner_RAS'])
+
+        stim_coords['surf_ori'] = coords_surf_ori.copy()
     return stim_coords
 
 
@@ -213,7 +216,7 @@ def plot_source_space(subj, study_path, subjects_dir):
     mlab.show()
 
 
-def save_results(subj, study_path, stim_params, evoked, dist_dis, dist_dip, img_type):
+def save_results(subj, study_path, stim_params, evoked, img_type, dist_dis, dist_dip):
     import csv
     cols = ['subj', 'w_s', 'intens', 'ch', 'is_left', 'n_epo', 'n_ch', 'dist_dis', 'dist_dip']
     results_fname = op.join(study_path, 'source_stim', subj, 'results', '%s_%s_results.csv' % (subj, img_type))
@@ -221,6 +224,11 @@ def save_results(subj, study_path, stim_params, evoked, dist_dis, dist_dip, img_
         with open(results_fname, 'w') as fid:
             wr = csv.writer(fid, delimiter=',', quotechar='\'')
             wr.writerow(cols)
+
+    if dist_dip is None:
+        dist_dip = 999
+    if dist_dis is None:
+        dist_dip = 999
 
     results = [subj, stim_params['w_s'], stim_params['stim_int'], stim_params['ch'], stim_params['is_left'], evoked.nave,
                len(evoked.ch_names), round(dist_dis, 2), round(dist_dip, 2)]
@@ -236,10 +244,45 @@ def read_an_to_ori_trans(an_to_ori_fname):
 def find_stim_events(raw):
     import peakutils
     good_ch = [ix for ix, ch in enumerate(raw.ch_names) if ch not in raw.info['bads']]
-    avg = raw.get_data(picks=good_ch).mean(0)
-    indexes = peakutils.indexes(avg, thres=0.7, min_dist=50)
-    plt.plot(raw.times, avg)
-    plt.plot(indexes/1e3, avg[indexes], 'o')
-    plt.title('stimulations found: %s' % len(indexes)), plt.ylabel('amplitude'), plt.xlabel('time (s)')
+    dat = raw.get_data(picks=good_ch)
+
+    hp = mne.filter.filter_data(dat, raw.info['sfreq'], 200, None, method='iir', iir_params=None)
+    avg = hp.mean(0)
+    gfp = hp.std(0)
+
+    use = gfp
+
+    ev_ok = False
+    raw_ok = True
+    thres = 0.7
+    while not ev_ok:
+        indexes = peakutils.indexes(use, thres=thres, min_dist=100)
+        plt.plot(raw.times, use)
+        plt.plot(indexes/1e3, use[indexes], 'o')
+        plt.title('threshold = %0.1f - stimulations found: %s' % (thres, len(indexes))), plt.ylabel('gfp'), plt.xlabel('time (s)')
+        plt.tight_layout()
+        plt.show()
+        resp = raw_input('ok? y (yes) / r (back to raw) / nr (new threshold): ')
+        if resp == 'y':
+            ev_ok = True
+        elif resp == 'r':
+            ev_ok = True
+            raw_ok = False
+        else:
+            thres = float(resp)
     events = np.vstack((indexes, np.zeros(len(indexes)), np.ones(len(indexes)))).T.astype(int)
-    return events
+
+    return events, raw_ok
+
+
+def make_static_trans(subj):
+    from mne.transforms import Transform
+    fro=4
+    to=5
+    trans_mat = np.array([[1., 0., 0., 0.],
+                          [0., 1., 0., 0.],
+                          [0., 0., 1., 0.],
+                          [0., 0., 0., 1.]])
+    trans = Transform(fro, to, trans_mat)
+    fname_trans = op.join(study_path, 'source_stim', subj, 'source_files', 'orig', '%s_static-trans.fif' % subj)
+    trans.save(fname_trans)

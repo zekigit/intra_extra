@@ -2,6 +2,7 @@ import mne
 import os.path as op
 from os import listdir
 import pandas as pd
+import numpy as np
 from intra_extra_info import study_path
 from intra_extra_fx import load_eeg, find_stim_events, make_dig_montage_file
 pd.set_option('display.expand_frame_repr', False)
@@ -13,10 +14,24 @@ def preprocess(fname_dat, subj, study_path, bads):
     raw = load_eeg(fname_dat, subj, study_path)
     raw.info['bads'] = bads
     raw.filter(0.1, None)
-    raw.plot(n_channels=64, block=True, title=cond)  # mark bad channels
 
-    events = find_stim_events(raw)
-    eeg_epo = mne.Epochs(raw, events, event_id={'stim': 1}, tmin=-0.5, tmax=0.5, baseline=(-0.5, -0.25), preload=True)
+    raw_ok = False
+    while not raw_ok:
+        raw.plot(n_channels=64, block=True, title=cond, duration=15)  # mark bad channels
+        if raw.annotations is not None and len(raw.annotations) != 0:
+            if raw.annotations.onset[0] < raw.times[len(raw.times)/2]:
+                raw.crop(raw.annotations.onset[0] + raw.annotations.duration[0], None)
+            else:
+                raw.crop(0.001, raw.annotations.onset[0])
+
+            raw.annotations.delete([0])
+            raw._first_samps = np.array([0])
+            raw._last_samps = np.array([raw.get_data().shape[1]])
+
+        events, raw_ok = find_stim_events(raw)
+
+    eeg_epo = mne.Epochs(raw, events, event_id={'stim': 1}, tmin=-0.5, tmax=0.5, baseline=(-0.5, -0.25),
+                         reject_by_annotation=False, preload=True)
     dig_fname = op.join(study_path, 'physio_data', subj, 'chan_info', '%s_egi_digitalization.hpts' % subj)
     montage = mne.channels.read_montage(dig_fname, unit='mm')
     # montage.plot(kind='3d')
@@ -45,8 +60,8 @@ if __name__ == '__main__':
     dat_path = op.join(study_path, 'physio_data', subj, 'SPES')
     stim_files = listdir(dat_path)
 
-    #stim_file = stim_files[14]
+    # stim_file = stim_files[21]
     bads = []
-    for stim_file in stim_files[14:]:
+    for stim_file in stim_files:
         fname_dat = op.join(dat_path, stim_file)
         eeg_epo, bads = preprocess(fname_dat, subj, study_path, bads)
