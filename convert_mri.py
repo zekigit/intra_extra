@@ -12,3 +12,4 @@ nb.save(img, op.join(study_path, subj, 'MRI_an.mgz'))
 
 mri_file = '/Users/lpen/Documents/intra_milano/hbp_jupyter/hbp_subj/mri/T1.mgz'
 img = nb.load(mri_file)
+om.dicomwrappers.wrapper_from_file(fname)

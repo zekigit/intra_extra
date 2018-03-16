@@ -12,22 +12,17 @@ import sys
 def preprocess(fname_dat, subj, study_path, bads):
     cond = op.split(fname_dat)[-1]
     raw = load_eeg(fname_dat, subj, study_path)
+    if bads == 'load':
+        all_bads = pd.read_csv(op.join(study_path, 'source_stim', subj, 'epochs', '%s_bad_chans.csv' % subj))
+        bads_bool = all_bads[all_bads.cond == cond].values[0][2:]
+        bads = [raw.ch_names[ix] for ix, bo in enumerate(bads_bool) if bo == 1]
+
     raw.info['bads'] = bads
-    raw.filter(0.1, None)
+    #raw.filter(0.1, None)
 
     raw_ok = False
     while not raw_ok:
         raw.plot(n_channels=64, block=True, title=cond, duration=15)  # mark bad channels
-        if raw.annotations is not None and len(raw.annotations) != 0:
-            if raw.annotations.onset[0] < raw.times[len(raw.times)/2]:
-                raw.crop(raw.annotations.onset[0] + raw.annotations.duration[0], None)
-            else:
-                raw.crop(0.001, raw.annotations.onset[0])
-
-            raw.annotations.delete([0])
-            raw._first_samps = np.array([0])
-            raw._last_samps = np.array([raw.get_data().shape[1]])
-
         events, raw_ok = find_stim_events(raw)
 
     eeg_epo = mne.Epochs(raw, events, event_id={'stim': 1}, tmin=-0.5, tmax=0.5, baseline=(-0.5, -0.25),

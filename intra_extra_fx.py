@@ -226,9 +226,9 @@ def save_results(subj, study_path, stim_params, evoked, img_type, dist_dis, dist
             wr.writerow(cols)
 
     if dist_dip is None:
-        dist_dip = 999
+        dist_dip = 999.
     if dist_dis is None:
-        dist_dip = 999
+        dist_dis = 999.
 
     results = [subj, stim_params['w_s'], stim_params['stim_int'], stim_params['ch'], stim_params['is_left'], evoked.nave,
                len(evoked.ch_names), round(dist_dis, 2), round(dist_dip, 2)]
@@ -261,8 +261,9 @@ def find_stim_events(raw):
         plt.plot(indexes/1e3, use[indexes], 'o')
         plt.title('threshold = %0.1f - stimulations found: %s' % (thres, len(indexes))), plt.ylabel('gfp'), plt.xlabel('time (s)')
         plt.tight_layout()
-        plt.show()
+        plt.show(block=True)
         resp = raw_input('ok? y (yes) / r (back to raw) / nr (new threshold): ')
+        print(resp, type(resp))
         if resp == 'y':
             ev_ok = True
         elif resp == 'r':
@@ -277,8 +278,8 @@ def find_stim_events(raw):
 
 def make_static_trans(subj):
     from mne.transforms import Transform
-    fro=4
-    to=5
+    fro = 4
+    to = 5
     trans_mat = np.array([[1., 0., 0., 0.],
                           [0., 1., 0., 0.],
                           [0., 0., 1., 0.],
@@ -286,3 +287,30 @@ def make_static_trans(subj):
     trans = Transform(fro, to, trans_mat)
     fname_trans = op.join(study_path, 'source_stim', subj, 'source_files', 'orig', '%s_static-trans.fif' % subj)
     trans.save(fname_trans)
+
+
+def make_bads_file(subj, study_path):
+    from os import listdir
+    import pandas as pd
+    epo_path = op.join(study_path, 'source_stim', subj, 'epochs', 'fif')
+    epo_files = listdir(epo_path)
+    conds = [s.strip('-epo.fif') for s in epo_files]
+    ch_names = ['E%i' % i for i in range(1, 257)]
+
+    bads = list()
+    for f in epo_files:
+        epo = mne.read_epochs(op.join(epo_path, f), preload=False)
+        epo_bads = [1 if ch in epo.info['bads'] else 0 for ch in ch_names]
+        bads.append(epo_bads)
+
+    bads_arr = np.array(bads)
+
+    bads_df = pd.DataFrame(bads, columns=ch_names)
+    bads_df.insert(0, 'cond', conds)
+    bads_df.index.name = 'ix'
+    bads_df.to_csv(op.join(study_path, 'source_stim', subj, 'epochs', '%s_bad_chans.csv' % subj))
+
+
+
+
+
