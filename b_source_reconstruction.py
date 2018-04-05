@@ -32,7 +32,7 @@ def make_fwd_solution(cond_fname, fs_subj, study_path):
     fwd = mne.make_forward_solution(eeg_epo.info, trans_fname, src_fname, bem_fname)
 
     trans = mne.read_trans(trans_fname)
-    mne.viz.plot_alignment(eeg_epo.info, trans, subject='%s' % subj, surfaces=['head', 'brain'], subjects_dir=subjects_dir)
+    mne.viz.plot_alignment(eeg_epo.info, trans, subject=subj, surfaces=['head', 'brain'], subjects_dir=subjects_dir)
     # mlab.show()
 
     mne.write_forward_solution(op.join(study_path, 'source_stim', subj, 'source_files', img_type,
@@ -212,7 +212,7 @@ def dipole_source_loc(evoked, cov,  fs_subj, study_path, plot=False):
 
 
 if __name__ == '__main__':
-    subj = 'S3'
+    subj = 'S5'
     img_type = 'orig'
     fs_subj = subj + '_an' if img_type == 'anony' else subj
 

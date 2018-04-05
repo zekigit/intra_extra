@@ -52,7 +52,7 @@ if __name__ == '__main__':
     # subj = sys.argv[1]
     # study_path = sys.argv[2]
 
-    subj = 'S3'
+    subj = 'S1'
     dig_fname = op.join(study_path, 'physio_data', subj, 'chan_info', '%s_egi_digitalization.hpts' % subj)
     if not op.isfile(dig_fname):
         make_dig_montage_file(subj, study_path)

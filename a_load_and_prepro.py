@@ -3,7 +3,7 @@ import os.path as op
 from os import listdir
 import pandas as pd
 import numpy as np
-from intra_extra_info import study_path
+from intra_extra_info import study_path, egi_outside_chans
 from intra_extra_fx import load_eeg, find_stim_events, make_dig_montage_file
 pd.set_option('display.expand_frame_repr', False)
 import sys
@@ -18,7 +18,8 @@ def preprocess(fname_dat, subj, study_path, bads):
         bads = [raw.ch_names[ix] for ix, bo in enumerate(bads_bool) if bo == 1]
 
     raw.info['bads'] = bads
-    #raw.filter(0.1, None)
+    # raw.drop_channels(egi_outside_chans)
+    # raw.filter(0.1, None)
 
     raw_ok = False
     while not raw_ok:
@@ -47,7 +48,7 @@ if __name__ == '__main__':
     subj = sys.argv[1]
     # study_path = sys.argv[2]
 
-    # subj = 'S3'
+    # subj = 'S5'
     dig_fname = op.join(study_path, 'physio_data', subj, 'chan_info', '%s_egi_digitalization.hpts' % subj)
     if not op.isfile(dig_fname):
         make_dig_montage_file(subj, study_path)
@@ -55,8 +56,8 @@ if __name__ == '__main__':
     dat_path = op.join(study_path, 'physio_data', subj, 'SPES')
     stim_files = listdir(dat_path)
 
-    # stim_file = stim_files[21]
+    # stim_file = stim_files[0]
     bads = []
-    for stim_file in stim_files:
+    for stim_file in stim_files[19:]:
         fname_dat = op.join(dat_path, stim_file)
-        eeg_epo, bads = preprocess(fname_dat, subj, study_path, bads)
+        eeg_epo, bads = preprocess(fname_dat, subj, study_path, bads=bads)

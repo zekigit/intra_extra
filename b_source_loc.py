@@ -11,8 +11,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from mayavi import mlab
 from scipy.spatial.distance import euclidean
-from intra_extra_fx import find_stim_coords, get_stim_params, plot_source_space, save_results
-from intra_extra_info import study_path, subjects_dir, egi_outside_chans
+from intra_extra_fx import find_stim_coords, get_stim_params, plot_source_space, save_results, epochs_fine_alignment, correct_amp
+from intra_extra_info import study_path, subjects_dir, egi_outside_chans, shared_folder
 import re
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.patches as mpatches
@@ -40,7 +40,7 @@ def make_vol_fwd(epochs, fs_subj, study_path, subjects_dir):
                                     n_jobs=3)
 
     mne.write_forward_solution(op.join(study_path, 'source_stim', subj, 'source_files', img_type,
-                               '%s_vol_source_space_5mm-fwd.fif' % subj), fwd)
+                               '%s_vol_source_space_5mm-fwd.fif' % subj), fwd, overwrite=True)
     return fwd
 
 
@@ -48,11 +48,9 @@ def vol_source_loc(evoked, fwd, cov, fs_subj, method='sLORETA', plot=False):
     cond = evoked.info['description']
     stim_coords = find_stim_coords(cond, subj, study_path)
 
-    evo_crop = evoked.copy().crop(-0.05, 0.05)
+    evo_crop = evoked.copy().crop(-0.003, 0.003)
 
-    inv = mne.minimum_norm.make_inverse_operator(evoked.info, fwd, cov, loose=1, depth=None)
-
-    snr = evo_crop.data
+    inv = mne.minimum_norm.make_inverse_operator(evoked.info, fwd, cov, loose=1, depth=0.8)
 
     snr = 30.
     lambda2 = 1. / snr ** 2
@@ -77,12 +75,27 @@ def vol_source_loc(evoked, fwd, cov, fs_subj, method='sLORETA', plot=False):
 
     loc_coords = apply_affine(mri.affine, stim_loc_vox[:3])
     dist = euclidean(stim_coords['scanner_RAS'], loc_coords)
+
+    max_coords = ni.plotting.find_xyz_cut_coords(img_max, activation_threshold=99.95)
+
     print('Distance: %0.1f mm' % dist)
 
     if plot:
-        thr = np.percentile(img_max.get_data(), 99.99)
+        thr = np.percentile(img_max.get_data(), 99.95)
         st_map = plot_stat_map(img_max, mri_file, threshold=thr, display_mode='ortho', cmap=plt.cm.plasma,
-                               cut_coords=loc_coords)
+                               cut_coords=max_coords)
+
+    img_thr = ni.image.threshold_img(img_max, '99%')
+
+    from scipy import linalg
+    inv_aff = linalg.inv(mri.affine)
+    stim_scan_coords = apply_affine(inv_aff, stim_loc_vox[:3])
+    img_thr_dat = img_thr.get_data()
+
+    dat = img_max.get_data()
+    plt.hist(dat[np.nonzero(dat)].flatten())
+    plot_stat_map(img_max, mri_file)
+
 
 
     # img_smo = ni.image.smooth_img(index_img(img, t_max), fwhm=50)
@@ -100,48 +113,48 @@ def vol_source_loc(evoked, fwd, cov, fs_subj, method='sLORETA', plot=False):
     # plt.close()
     #
     # stc_dspm = mne.minimum_norm.apply_inverse(evo_crop, inv, lambda2=lambda2,
-    #                          method='dSPM')
+    #                           method='dSPM')
     #
-    # # # Compute TF-MxNE inverse solution with dipole output
-    # # from mne.inverse_sparse import tf_mixed_norm, make_stc_from_dipoles
-    # # alpha_space = 50
-    # # alpha_time = 0
-    # # loose = 1
-    # # depth = 0.2
-    # #
-    # #
-    # # dipoles, residual = tf_mixed_norm(
-    # #     evo_crop, fwd, cov, alpha_space, alpha_time, loose=loose, depth=depth,
-    # #     maxit=200, tol=1e-6, weights=stc_dspm, weights_min=8., debias=True,
-    # #     wsize=16, tstep=4, window=0.05, return_as_dipoles=True,
-    # #     return_residual=True)
-    # #
-    # # stim_coords = find_stim_coords(cond, subj, study_path)
-    # #
-    # # import mne.transforms as tra
-    # # trans_fname = op.join(study_path, 'source_stim', subj, 'source_files', img_type, '%s_fid-trans.fif' % fs_subj)
-    # # trans = mne.read_trans(trans_fname)
-    # #
-    # # stim_point = stim_coords['surf']  # get point for plot in mm
-    # # #dip.pos[np.argmax(dip.gof)] = tra.apply_trans(surf_to_head, stim_coords['surf_ori']/1e3)  # check stim loc (apply affine in m)
-    # #
-    # # idx = np.argmax([np.max(np.abs(dip.amplitude)) for dip in dipoles])
-    # # dip_surf = tra.apply_trans(trans['trans'], dipoles[idx].pos[0]) * 1e3  # transform from head to surface
-    # # dist_surf = euclidean(dip_surf, stim_point)  # compute distance in surface space
-    # # print(dist_surf)
-    # #
-    # # plot_dipole_amplitudes(dipoles)
-    # #
-    # # # Plot dipole location of the strongest dipole with MRI slices
-    # #
-    # # plot_dipole_locations(dipoles[idx], fwd['mri_head_t'], subj,
-    # #                       subjects_dir=subjects_dir, mode='orthoview',
-    # #                       idx='amplitude')
+    # Compute TF-MxNE inverse solution with dipole output
+    # from mne.inverse_sparse import tf_mixed_norm, make_stc_from_dipoles
+    # alpha_space = 50
+    # alpha_time = 0
+    # loose = 1
+    # depth = 0.2
+
+
+    # dipoles, residual = tf_mixed_norm(
+    #     evo_crop, fwd, cov, alpha_space, alpha_time, loose=loose, depth=depth,
+    #     maxit=200, tol=1e-6, weights=stc_dspm, weights_min=8., debias=True,
+    #     wsize=16, tstep=4, window=0.05, return_as_dipoles=True,
+    #     return_residual=True)
+    #
+    # stim_coords = find_stim_coords(cond, subj, study_path)
+    #
+    # import mne.transforms as tra
+    # trans_fname = op.join(study_path, 'source_stim', subj, 'source_files', img_type, '%s_fid-trans.fif' % fs_subj)
+    # trans = mne.read_trans(trans_fname)
+    #
+    # stim_point = stim_coords['surf']  # get point for plot in mm
+    # #dip.pos[np.argmax(dip.gof)] = tra.apply_trans(surf_to_head, stim_coords['surf_ori']/1e3)  # check stim loc (apply affine in m)
+    #
+    # idx = np.argmax([np.max(np.abs(dip.amplitude)) for dip in dipoles])
+    # dip_surf = tra.apply_trans(trans['trans'], dipoles[idx].pos[0]) * 1e3  # transform from head to surface
+    # dist_surf = euclidean(dip_surf, stim_point)  # compute distance in surface space
+    # print(dist_surf)
+    #
+    # plot_dipole_amplitudes(dipoles)
+    #
+    # # Plot dipole location of the strongest dipole with MRI slices
+    #
+    # plot_dipole_locations(dipoles[idx], fwd['mri_head_t'], subj,
+    #                       subjects_dir=subjects_dir, mode='orthoview',
+    #                       idx='amplitude')
     return dist
 
 
 def dip_source_loc(evoked, cov,  fs_subj, study_path, plot=False):
-    evo_crop = evoked.copy().crop(-0.005, 0.005)
+    evo_crop = evoked.copy().crop(-0.003, 0.003)
     subj = fs_subj.strip('_an') if fs_subj.find('_an') > 0 else fs_subj
     img_type = 'anony' if fs_subj.find('_an') > 0 else 'orig'
 
@@ -151,7 +164,7 @@ def dip_source_loc(evoked, cov,  fs_subj, study_path, plot=False):
     cond = evoked.info['description']
     stim_coords = find_stim_coords(cond, subj, study_path)
 
-    dip = mne.fit_dipole(evo_crop, cov, bem_fname, trans_fname, min_dist=10, n_jobs=3)[0]
+    dip, res = mne.fit_dipole(evo_crop, cov, bem_fname, trans_fname, min_dist=10, n_jobs=3)
 
     import mne.transforms as tra
     from scipy import linalg
@@ -169,7 +182,7 @@ def dip_source_loc(evoked, cov,  fs_subj, study_path, plot=False):
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         dip.plot_locations(trans_fname, fs_subj, subjects_dir, mode='orthoview', coord_frame='mri', ax=ax, show_all=True,
-                           idx='amplitude')
+                           idx='gof')
         ax.scatter(stim_point[0], stim_point[1], stim_point[2])
         ax.plot([stim_point[0], -128], [stim_point[1], stim_point[1]], [stim_point[2], stim_point[2]], color='g')
         ax.plot([stim_point[0], stim_point[0]], [stim_point[1], -128], [stim_point[2], stim_point[2]], color='g')
@@ -188,32 +201,24 @@ def dip_source_loc(evoked, cov,  fs_subj, study_path, plot=False):
     return dist_surf
 
 
-def interp_evoked(evoked):
-    from scipy.interpolate import interp1d
-    from skimage.restoration import denoise_tv_bregman
+def single_trial_source(epo_alig):
+    from mne.minimum_norm import apply_inverse_epochs
+    evoked = epo_alig.average()
+    cond = evoked.info['description']
+    stim_coords = find_stim_coords(cond, subj, study_path)
 
-    data = evoked.data.copy()
+    evo_crop = evoked.copy().crop(-0.001, 0.001)
 
-    x1 = np.linspace(evoked.times[0], evoked.times[-1], len(evoked.times)*8)
+    inv = mne.minimum_norm.make_inverse_operator(evoked.info, fwd, cov, loose=1, depth=None)
 
-    int_dat = list()
-    for r in data:
-        f_inter = interp1d(evoked.times, r, kind='cubic')
-        int_dat.append(f_inter(x1))
-    int_dat_arr = np.array(int_dat)
+    snr = 30.
+    lambda2 = 1. / snr ** 2
+    method = 'dSPM'
 
-    plt.plot(evoked.times, data[10,:])
-    plt.plot(x1, int_dat_arr[10,:])
+    stcs = apply_inverse_epochs(epo_alig, inv, lambda2, method,
+                                nave=evoked.nave)
 
-    dig_fname = op.join(study_path, 'physio_data', subj, 'chan_info', '%s_egi_digitalization.hpts' % subj)
-    montage = mne.channels.read_montage(dig_fname, unit='mm')
-    info = mne.create_info(evoked.ch_names, sfreq=8000., ch_types='eeg', montage=montage)
-    info['description'] = evoked.info['description']
-    info['projs'] = evoked.info['projs']
-
-    evo_int = mne.EvokedArray(int_dat_arr, info, tmin=-0.5, nave=evoked.nave)
-
-    return evo_int
+    mean_stc = sum(stcs) / len(stcs)
 
 
 if __name__ == '__main__':
@@ -229,9 +234,15 @@ if __name__ == '__main__':
     fwd_fname = op.join(study_path, 'source_stim', subj, 'source_files', img_type,
                         '%s_vol_source_space_5mm-fwd.fif' % fs_subj)
 
+    fname_model = op.join(study_path, 'source_stim', subj, 'source_files', '%s_filt_regr.skmod' % subj)
+
     for cond_fname in conds:
         epochs = mne.read_epochs(cond_fname)
-        epochs.interpolate_bads(reset_bads=True)
+        cond = epochs.info['description']
+        stim_params = get_stim_params(cond)
+
+        epochs.drop_channels(epochs.info['bads'])
+        #epochs.interpolate_bads(reset_bads=True)
 
         if not op.isfile(fwd_fname):
             fwd = make_vol_fwd(epochs, fs_subj, study_path, subjects_dir)
@@ -243,20 +254,25 @@ if __name__ == '__main__':
         # epo_base.filter(None, 40)
         # cov = mne.compute_covariance(epo_base, method='shrunk', tmin=-0.45, tmax=-0.15)  # use method='auto' for final computation
 
-        epochs.drop_channels(egi_outside_chans)
-
-        cov = mne.compute_covariance(epochs, method='shrunk', tmin=-0.5, tmax=-0.3)  # use method='auto' for final computation
-        evoked = epochs.average()
-        # evo_f = evoked.filter(200, None, method='iir', iir_params=None)
-        # evo_f.plot()
+        epo_alig = epochs_fine_alignment(epochs)
+        epo_alig.save(op.join(shared_folder, '%s_alig-epo.fif' % cond))
+        # epo_alig.filter(200, None, method='iir', iir_params=None)
+        # #epo_alig = epochs.copy()
+        # #epo_alig.drop_channels(egi_outside_chans)
+        # #epo_alig = correct_amp(epo_alig, fname_model)
         #
-        # evoked.plot(spatial_colors=True, xlim=(-10, 10), gfp=True)
-        # evoked.plot_topomap(np.linspace(-0.005, 0.005, 11))
-
-        dist_dis = vol_source_loc(evoked, fwd, cov, fs_subj)
-        dist_dip = dip_source_loc(evoked, cov,  fs_subj, study_path, plot=False)
-
-        cond = epochs.info['description']
-        stim_params = get_stim_params(cond)
-
-        save_results(subj, study_path, stim_params, evoked, img_type, dist_dis=dist_dis, dist_dip=dist_dip)
+        #
+        # cov = mne.compute_covariance(epo_alig, method='shrunk', tmin=-0.4, tmax=-0.15, verbose=False)  # use method='auto' for final computation
+        # evoked = epo_alig.average()
+        #
+        # # evo_f = evoked.filter(200, None, method='iir', iir_params=None)
+        # # evo_f.plot()
+        # #
+        # # evoked.plot(spatial_colors=True, xlim=(-10, 10), gfp=True)
+        # # evoked.plot_topomap(np.linspace(-0.005, 0.005, 11))
+        #
+        # #dist_dis = vol_source_loc(evoked, fwd, cov, fs_subj)
+        # dist_dip = dip_source_loc(evoked, cov,  fs_subj, study_path, plot=False)
+        #
+        #
+        # save_results(subj, study_path, stim_params, evoked, img_type, dist_dis=None, dist_dip=dist_dip)

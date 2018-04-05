@@ -15,8 +15,9 @@ export MNE_ROOT=/home/eze/soft/MNE-2.7.4-3514-Linux-x86_64
 
 echo "Pocessing subject: " ${SUBJECT}
 
+
 # Run BEM solution
-python /home/eze/PycharmProjects/intra_extra_ubu/make_bem.py ${SUBJECT} ${SUBJECTS_DIR}
+#python /home/eze/PycharmProjects/intra_extra_ubu/make_bem.py ${SUBJECT} ${SUBJECTS_DIR}
 
 # Run space sources
 python /home/eze/PycharmProjects/intra_extra_ubu/make_source_space.py ${SUBJECT} ${SUBJECTS_DIR} ${STUDY_PATH}

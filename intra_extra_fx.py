@@ -56,7 +56,12 @@ def load_eeg(fname_dat, subj, study_path):
 
     eeg_info = mne.create_info(['E{}' .format(n+1) for n in range(256)], 1000., 'eeg', montage=montage)
 
-    eeg_raw = mne.io.RawArray(eeg_base['data'] * 1e-6, eeg_info)  # rescale to volts
+    try:
+        eeg_raw = mne.io.RawArray(eeg_base['data'] * 1e-6, eeg_info)  # rescale to volts
+    except KeyError:
+        eeg_base = eeg_base['EEG']
+        eeg_raw = mne.io.RawArray(eeg_base['data'] * 1e-6, eeg_info)  # rescale to volts
+
     eeg_raw.set_montage(montage, set_dig=True)
     # eeg_raw.plot_sensors(kind='3d', ch_type='all', show_names=True )
     eeg_raw.info['description'] = op.split(fname_dat)[-1].replace('_epochs.edf', '')
@@ -103,12 +108,12 @@ def export_slicer_markups_egi(subj, study_path):
     dig_points[:, 0] = dig_points[:, 0]*-1
     dig_points[:, 1] = dig_points[:, 1]*-1
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(dig_points[:, 0], dig_points[:, 1], dig_points[:, 2])
-    for x, y, z, lab in zip(dig_points[:, 0], dig_points[:, 1], dig_points[:, 2], np.arange(len(dig_points))):
-        ax.text(x, y, z, lab)
-    print(dig_points.shape)
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.scatter(dig_points[:, 0], dig_points[:, 1], dig_points[:, 2])
+    # for x, y, z, lab in zip(dig_points[:, 0], dig_points[:, 1], dig_points[:, 2], np.arange(len(dig_points))):
+    #     ax.text(x, y, z, lab)
+    # print(dig_points.shape)
 
     ch_names = subj_dig_mont[subj]['ch_names']
 
@@ -128,6 +133,15 @@ def make_dig_montage_file(subj, study_path):
 
     dig_points[:, 0] = dig_points[:, 0]*-1
     dig_points[:, 1] = dig_points[:, 1]*-1
+
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.scatter(dig_points[:, 0], dig_points[:, 1], dig_points[:, 2])
+    # for x, y, z, lab in zip(dig_points[:, 0], dig_points[:, 1], dig_points[:, 2], np.arange(len(dig_points))):
+    #     ax.text(x, y, z, lab)
+    # print(dig_points.shape)
+
 
     ch_names = subj_dig_mont[subj]['ch_names']
     ch_types = subj_dig_mont[subj]['ch_types']
@@ -233,8 +247,9 @@ def save_results(subj, study_path, stim_params, evoked, img_type, dist_dis, dist
     results = [subj, stim_params['w_s'], stim_params['stim_int'], stim_params['ch'], stim_params['is_left'], evoked.nave,
                len(evoked.ch_names), round(dist_dis, 2), round(dist_dip, 2)]
     with open(results_fname, 'a') as fid:
-        wr = csv.writer(fid, delimiter=',', quotechar='\'')
+        wr = csv.writer(fid, delimiter=',', quotechar='\"')
         wr.writerow(results)
+
 
 def read_an_to_ori_trans(an_to_ori_fname):
     an_to_ori_trans = np.genfromtxt(an_to_ori_fname, skip_header=8, skip_footer=18)
@@ -272,6 +287,12 @@ def find_stim_events(raw):
         else:
             thres = float(resp)
     events = np.vstack((indexes, np.zeros(len(indexes)), np.ones(len(indexes)))).T.astype(int)
+
+
+    hp_raw = raw.copy().filter(200, None)
+    from mne.time_frequency import psd_multitaper
+    psds, freqs = psd_multitaper(raw, low_bias=True, tmin=None, tmax=None,
+                                 fmin=200, n_jobs=1)
 
     return events, raw_ok
 
@@ -311,6 +332,136 @@ def make_bads_file(subj, study_path):
     bads_df.to_csv(op.join(study_path, 'source_stim', subj, 'epochs', '%s_bad_chans.csv' % subj))
 
 
+def epochs_fine_alignment(epochs):
+    from mne.time_frequency import psd_multitaper
+
+    psd, freqs = psd_multitaper(epochs, fmin=150, fmax=250)
+    mean_psd = np.average(psd, axis=(0, 2))
+    max_psd_ch_ix = np.argmax(mean_psd)
+
+    dat_ls = list()
+    for ep in epochs:
+        ch_dat = ep[max_psd_ch_ix, :]
+        ix_max = np.argmin(ch_dat)
+        epo_dat = ep[:, ix_max-400:ix_max+400]
+
+        dat_ls.append(epo_dat)
+
+    new_dat = np.array(dat_ls)
+    epo_alig = mne.EpochsArray(new_dat, epochs.info, tmin=-0.4, baseline=None)
+
+    n = 0
+    epo_ls_sel = list()
+    for ep in epo_alig:
+        if (ep[max_psd_ch_ix, 399] > 0) and (ep[max_psd_ch_ix, 401] > 0):
+            #plt.plot(epo_alig.times[380:420], ep[max_psd_ch_ix, 380:420], alpha=0.5)
+            n += 1
+            print(n)
+            epo_ls_sel.append(ep)
+            #plt.pause(0.5)
+            #plt.clf()
+    new_dat = np.array(epo_ls_sel)
+    epo_alig = mne.EpochsArray(new_dat, epochs.info, tmin=-0.4, baseline=None)
+    return epo_alig
+
+
+    fig, axes = plt.subplots(5, 6, sharex=True, sharey=True)
+
+    for ep,ax in zip(epo_alig, fig.axes):
+        ax.plot(epo_alig.times[380:420]*1e3, ep[max_psd_ch_ix, 380:420])
+
+    plt.setp(axes, xticks=np.linspace(-10, 10, 3))
 
 
 
+    fig, axes = plt.subplots(5, 6, sharex=True, sharey=True)
+
+    for ep,ax in zip(epochs, fig.axes):
+        ax.plot(epochs.times*1e3, ep[max_psd_ch_ix, :])
+
+    plt.setp(axes, xticks=np.linspace(-10, 10, 3))
+
+
+def correct_amp(epo_alig, fname_model):
+    from sklearn.externals import joblib
+    regr = joblib.load(fname_model)
+
+    t0_dat = epo_alig.copy().crop(0, 0).get_data()
+
+    new_dat = list()
+    for ep in np.squeeze(t0_dat):
+        preds = regr.predict(ep.reshape(-1, 1))
+        new_dat.append(preds)
+
+    new_dat = np.array(new_dat)
+
+    new_epo = epo_alig.copy()
+    new_epo._data[:, :, epo_alig.time_as_index(0)] = new_dat.copy()
+    return new_epo
+
+
+
+def closest_nodes(node, all_nodes, used_nodes, nr_nodes=1):
+    nodes = np.asarray(all_nodes[used_nodes])
+    dist_2 = np.sum((nodes - node)**2, axis=1)
+    used_vertnos = dist_2.argsort()[:nr_nodes]
+    vertnos = used_nodes[used_vertnos]
+    return vertnos
+
+
+def calc_stim_skull_dist(subj, study_path):
+    subjects_dir = '/home/eze/intra_extra/freesurfer_subjects'
+
+    fname_brain_lh = op.join(subjects_dir, subj, 'surf', 'lh.pial')
+    fname_brain_rh = op.join(subjects_dir, subj, 'surf', 'rh.pial')
+    fname_head = op.join(subjects_dir, subj, 'bem', 'watershed', 'S5_outer_skin_surface')
+
+    brain_lh = mne.read_surface(fname_brain_lh)
+    brain_rh = mne.read_surface(fname_brain_rh)
+    head = mne.read_surface(fname_head)
+
+
+    import glob
+    epo_path = op.join(study_path, 'source_stim', subj, 'epochs', 'fif')
+    conds = glob.glob(epo_path + '/*-epo.fif')
+    conds = [op.split(c)[-1].strip('-epo.fif') for c in conds]
+
+    all_dist = list()
+    all_coords = list()
+    all_skin_coords = list()
+
+    for c in conds:
+        coords = find_stim_coords(c, subj, study_path)
+        coords = coords['surf']
+        all_coords.append(coords)
+        dist_all = np.sqrt(np.sum((head[0] - coords)**2, axis=1))
+        min_dist = dist_all[np.argmin(dist_all)]
+        all_dist.append(min_dist)
+        all_skin_coords.append(head[0][np.argmin(dist_all)])
+
+    all_coords = np.array(all_coords)
+    all_dist = np.array(all_dist)
+    all_skin_coords = np.array(all_skin_coords)
+
+    # plot
+    import mayavi.mlab as mlab
+    mlab.triangular_mesh(brain_lh[0][:, 0], brain_lh[0][:, 1], brain_lh[0][:, 2], brain_lh[1], opacity=0.3, colormap='Blues')
+    mlab.triangular_mesh(brain_rh[0][:, 0], brain_rh[0][:, 1], brain_rh[0][:, 2], brain_rh[1], opacity=0.3, colormap='Blues')
+    mlab.triangular_mesh(head[0][:, 0], head[0][:, 1], head[0][:, 2], head[1], opacity=0.1, colormap='Wistia')
+
+    points = mlab.points3d(all_coords[:,0], all_coords[:,1], all_coords[:,2], all_dist, scale_mode='none',
+                           scale_factor=5, colormap='Spectral')
+
+    for l in range(len(all_coords)):
+        mlab.plot3d([all_coords[l,0], all_skin_coords[l,0]], [all_coords[l, 1], all_skin_coords[l,1]],
+                            [all_coords[l, 2], all_skin_coords[l, 2]], tube_radius=0.5)
+
+    cbar = mlab.colorbar(object=points, orientation='horizontal', title='distance to closest skin (mm)')
+    cbar.scalar_bar_representation.position = [0.25, 0.9]
+    cbar.scalar_bar_representation.position2 = [0.5, 0.05]
+
+    chs = [c.split('_')[0] for c in conds]
+    dist_df = pd.DataFrame({'ch': chs, 'sk_dist': np.round(all_dist, 2)})
+    dist_df = dist_df.drop_duplicates('ch')
+
+    dist_df.to_csv(op.join(study_path, 'source_stim', subj, 'source_files', '%s_dist_to_skin.csv' % subj), index=False)
